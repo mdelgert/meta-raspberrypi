@@ -1,3 +1,188 @@
+Based from the following article - http://www.pimpmypi.com/blog/blogPost.php?blogPostID=7
+
+Step 1: Some terms and context to understand
+
+The Yocto Project: Provides OpenEmbedded (oe-core layer), Bitbake (build tool) and the meta-yocto layer at a stable and well tested version.
+
+Metadata: files which contain information on how to build packages
+
+Bitbake: Build and metadata manager, tells the system how to build packages, inspired by Gentoo's Portage tool.
+
+Poky: A distribution with a well tested configuration of oc-core packages and features.
+
+Step 2: Clone the Yocto Project Git repo
+
+We are going to download a beta version of the Yocto Project compilation which I have tested and is known to be working on the Pi. 
+
+First navigate to the directory you want to store your Yocto Project files and run the following command:
+
+git clone git://git.yoctoproject.org/poky yoctoProject
+
+
+This will clone the master version of the yocto project collection.
+
+cd into the yoctoProject directory
+
+cd yoctoProject
+
+git checkout 4a36a32567ecfbc7ce7b967803e6e23314953ef5
+
+
+This checks out a revision that I have tested and I know to work. This is necessary as we are using code in active development.
+
+Step 3: Get the meta-raspberrypi layer
+
+The meta-raspberrypi layer is a BSP layer, this is a layer which holds all the meta-data for building for the Raspberry Pi, most importantly the Kernel and architecture configuration. We're going to do a git clone of the meta-raspberrypi repository.
+
+Clone the meta-raspberrypi repository
+
+git clone https://github.com/djwillis/meta-raspberrypi.git
+
+
+Checkout to the same commit as I used in this post.
+
+cd meta-raspberrypi
+
+
+git checkout 305c5259e24eaa9fb285ca983dc4f9454743fa0c
+
+
+Step 3: Setup the build environment
+
+Go back to your yoctoProject directory, if you are still in the meta-raspberrypi directory then a simple:
+
+cd ..
+
+
+Will suffice.
+
+Next, setup the build environment variables by sourcing the build script:
+
+source oe-init-build-env raspberryPiBuild/
+
+
+You have now setup the environment, a new folder 'raspberryPiBuild' has been automatically created and you have then been placed into it.
+
+Step 4: Configure the build
+
+Now you have setup the environment, Bitbake can build for a number of architectures. You must configure it to build for the Raspberry Pi. Using your favourite text editor, edit the conf/local.conf file in your raspberryPiBuild directory.
+
+nano conf/local.conf
+
+
+In the conf file edit the following parameters:
+
+If you have more than 1 CPU core uncomment (remove the hash character) BB_NUMBER_THREADS and change the "4" to the number of threads available on your CPU + 1.
+
+I have 8 threads on my PC, so I would change it to 9.
+
+BB_NUMBER_THREADS = "9"
+
+
+Note: Make sure there is no empty space before the variable name.
+
+If you have more than 1 CPU core uncomment (remove the hash character) PARALLEL_MAKE and change the "-j 4" to the number of threads available on your CPU + 1.
+
+PARALLEL_MAKE = "-j 9"
+
+
+Note: Make sure there is no empty space before the variable name.
+
+Next scroll down the file until you see the MACHINE definition variables. Add your own custom one right at the start that says:
+
+MACHINE ?= "raspberrypi"
+
+
+Ensure that all the following MACHINE variables are commented out.
+
+Finally, we need to hide some packages (recipes) from bitbake as they're not yet compatible with the meta-yocto/oe-core layers we are using. So add the following line right at the bottom of the file:
+
+BBMASK = "meta-raspberrypi/recipes-multimedia/libav|meta-raspberrypi/recipes-core/systemd"
+
+
+Now save the file.
+
+Next up, we need to add the meta-rasperrypi layer we cloned earlier to the file conf/bblayers.conf. Open this file:
+
+nano conf/bblayers.conf
+
+
+Add a line below the last entry in the BBLAYERS variable (it should end in meta-yocto) stating:
+
+/path/to/meta-raspberrypi
+
+
+Please not the format of the other lines in the BBLAYERS variable, it will be very similar to the ones above but with the meta-raspberrypi instead of meta-*.
+
+You can see my example below:
+
+BBLAYERS ?= " \
+/home/jack/Projects/poky-rasp/meta \
+/home/jack/Projects/poky-rasp/meta-yocto \
+/home/jack/Projects/poky-rasp/meta-yocto-bsp \
+/home/jack/Projects/poky-rasp/meta-raspberrypi \
+"
+
+
+Step 5: Build a minimal distribution
+
+To compile your new distribution a few development tools are required, the install procedure for a few common Linux distributions are listed below. If you do not run one of these distributions then you can try running the bitbake command below anyway and it will alert you to which dependencies your system is missing and you can then install them with the package manager of your choice.
+
+Packages required for Ubuntu:
+
+sudo apt-get install sed wget cvs subversion git-core coreutils \
+unzip texi2html texinfo libsdl1.2-dev docbook-utils gawk \
+python-pysqlite2 diffstat help2man make gcc build-essential \
+g++ desktop-file-utils chrpath libgl1-mesa-dev libglu1-mesa-dev \
+mercurial autoconf automake groff libtool xterm
+
+
+Packages required for Fedora:
+
+sudo yum groupinstall "development tools"
+
+
+sudo yum install python m4 make wget curl ftp hg tar bzip2 gzip \
+unzip python-psyco perl texinfo texi2html diffstat openjade \
+docbook-style-dsssl sed docbook-style-xsl docbook-dtds \
+docbook-utils sed bc eglibc-devel ccache pcre pcre-devel quilt \
+groff linuxdoc-tools patch linuxdoc-tools cmake help2man \
+perl-ExtUtils-MakeMaker tcl-devel gettext chrpath ncurses apr \
+SDL-devel mesa-libGL-devel mesa-libGLU-devel gnome-doc-utils \
+autoconf automake libtool xterm
+
+
+Packages required for openSUSE:
+
+sudo zypper install python gcc gcc-c++ libtool \
+subversion git chrpath automake make wget help2man \
+diffstat texinfo mercurial freeglut-devel libSDL-devel
+
+
+The meta-raspberrypi layer provides us with a very minimal image which will construct an image file that we can directly write onto our SD card.
+
+To build the image we run
+
+bitbake rpi-basic-image
+
+
+Ensure, you are running this from your raspberryPiBuild directory.
+
+Now, depending on the speed of your machine this could take anything from 3 hours (Quad Core i7, 3GHz) to 24hrs+.
+
+Step 6: Running our new image
+
+Assuming the image built without an issues we can now copy the image to our SD card. The image is placed in the 'tmp/deploy/images' directory within your raspberryPiBuild directory.
+
+So, finally:
+
+dd if=tmp/deploy/images/rpi-basic-image.sd-img of=/path/to/sd/card
+
+
+This image will boot to a TTY and will also boot with DHCP enabled on the Ethernet port with the DropBear SSH server automatically started.
+
+To log in using the TTY or over SSH the username is root and password is blank (i.e. just press enter when asked for password).
+
                 .8MMMMMMMM       MMMMMMMM8.
               MMM77$$$$$$7MM   MM$$$$$$$$$MMM
               MM$$$$$$$$$$$$M M$$$$$$$$$$$$MM
